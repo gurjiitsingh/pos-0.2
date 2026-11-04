@@ -430,7 +430,7 @@ declare global {
       markTableHistoryPaid: (data: {
         tableNo: string;
         orderId: string;
-        billItems: KitchenItem[];
+        billItems: KitchenItem[]; 
       }) => Promise<{
         success: boolean;
         error?: string;
@@ -572,7 +572,8 @@ declare global {
         date: string
       ) => Promise<any>;
       getSalesReport: (
-        businessDate: string
+        businessDate: string,
+        endDate: string
       ) => Promise<any>;
 
       onKotReceived: (

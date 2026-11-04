@@ -109,6 +109,7 @@ const { showToast, toastComponent } = useToast();
       const result = await window.posApi.print({
         role,
         source: 'SYSTEM',
+        taxCategory: "FOOD_GST",
         data: {
           kotNumber: 'TEST',
           tableNo: 'T1',

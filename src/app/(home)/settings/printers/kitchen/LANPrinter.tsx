@@ -83,6 +83,7 @@ async function testPrint() {
     const result = await window.posApi.print({
       role: 'KITCHEN',
       source: 'SYSTEM',
+      taxCategory: "FOOD_GST",
       data: {
         kotNumber: 'TEST',
         tableNo: 'T1',

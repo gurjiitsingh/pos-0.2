@@ -685,6 +685,16 @@ CREATE TABLE IF NOT EXISTS pos_order_master (
 
   taxTotal REAL NOT NULL DEFAULT 0,
 
+  -- =====================================================
+-- TAX DETAILS
+-- =====================================================
+
+taxAmount REAL NOT NULL DEFAULT 0,
+
+taxAmount1 REAL NOT NULL DEFAULT 0,
+
+billType TEXT NOT NULL DEFAULT 'FOOD_GST',
+
   discountTotal REAL NOT NULL DEFAULT 0,
 
   grandTotal REAL NOT NULL DEFAULT 0,
@@ -743,7 +753,12 @@ CREATE TABLE IF NOT EXISTS pos_order_master (
 
   lastSyncedAt INTEGER,
 
+  -- =====================================================
+-- BILL SUMMARY
+-- =====================================================
 
+   gstBillCount INTEGER NOT NULL DEFAULT 0,
+   vatBillCount INTEGER NOT NULL DEFAULT 0,
   -- =====================================================
   -- EXTRA
   -- =====================================================
@@ -814,6 +829,7 @@ CREATE TABLE IF NOT EXISTS pos_order_items (
   id TEXT PRIMARY KEY,
 
   categoryName TEXT NOT NULL,
+  taxCategory TEXT NOT NULL DEFAULT 'FOOD_GST',
   productMode TEXT NOT NULL,
   currentStock REAL NOT NULL DEFAULT 0,
 
@@ -839,7 +855,7 @@ CREATE TABLE IF NOT EXISTS pos_order_items (
   taxRate REAL NOT NULL DEFAULT 0,
   taxType TEXT NOT NULL DEFAULT 'exclusive',
 
-     taxRate1 REAL,
+  taxRate1 REAL,
   taxType1 TEXT,
 
   taxAmountPerItem REAL NOT NULL DEFAULT 0,
@@ -858,27 +874,41 @@ CREATE TABLE IF NOT EXISTS pos_order_items (
   createdAt INTEGER NOT NULL
 );
 
+-- Order lookup
 CREATE INDEX IF NOT EXISTS idx_pos_order_items_orderMasterId
 ON pos_order_items(orderMasterId);
 
+-- Order + GST/VAT filtering
+CREATE INDEX IF NOT EXISTS idx_pos_order_items_order_taxCategory
+ON pos_order_items(orderMasterId, taxCategory);
+
+-- Product reports
 CREATE INDEX IF NOT EXISTS idx_pos_order_items_productId
 ON pos_order_items(productId);
 
+-- Parent/variant lookup
 CREATE INDEX IF NOT EXISTS idx_pos_order_items_parentId
 ON pos_order_items(parentId);
 
-CREATE INDEX IF NOT EXISTS idx_pos_order_items_createdAt
-ON pos_order_items(createdAt);
+-- Category reports
+CREATE INDEX IF NOT EXISTS idx_pos_order_items_categoryId
+ON pos_order_items(categoryId);
 
+-- Category name lookup
 CREATE INDEX IF NOT EXISTS idx_pos_order_items_categoryName
 ON pos_order_items(categoryName);
 
+-- Status filtering
 CREATE INDEX IF NOT EXISTS idx_pos_order_items_status
 ON pos_order_items(status);
 
+-- Status + chronological reports
 CREATE INDEX IF NOT EXISTS idx_pos_order_items_status_createdAt
 ON pos_order_items(status, createdAt);
 
+-- Chronological lookup
+CREATE INDEX IF NOT EXISTS idx_pos_order_items_createdAt
+ON pos_order_items(createdAt);
 
 -- =====================================================
 -- POS ORDER PAYMENTS
@@ -1423,6 +1453,732 @@ CREATE TABLE IF NOT EXISTS pos_shift (
 
   updatedAt INTEGER NOT NULL
 );
+
+
+
+
+
+
+
+-- ============================================================
+-- LOYALTY MANAGEMENT SYSTEM
+-- Complete database schema
+-- SQLite / better-sqlite3
+-- ============================================================
+
+
+-- ============================================================
+-- 1. LOYALTY PROGRAM
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_program (
+    id TEXT PRIMARY KEY,
+
+    programName TEXT NOT NULL,
+
+    description TEXT,
+
+    currencyCode TEXT,
+
+    -- Example: spend 100 currency units to earn 100 points
+    earnSpendMinor INTEGER NOT NULL DEFAULT 10000,
+    earnPoints INTEGER NOT NULL DEFAULT 100,
+
+    -- Example: 100 points = 100 minor currency units
+    redeemPoints INTEGER NOT NULL DEFAULT 100,
+    redeemValueMinor INTEGER NOT NULL DEFAULT 100,
+
+    minRedeemPoints INTEGER NOT NULL DEFAULT 100,
+    maxRedeemPercent INTEGER NOT NULL DEFAULT 100,
+
+    pointsExpiryDays INTEGER NOT NULL DEFAULT 365,
+
+    allowPartialRedemption INTEGER NOT NULL DEFAULT 1,
+    allowEarnOnDiscountedBills INTEGER NOT NULL DEFAULT 0,
+    allowEarnOnRedeemedAmount INTEGER NOT NULL DEFAULT 0,
+
+    isActive INTEGER NOT NULL DEFAULT 1,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CHECK (earnSpendMinor > 0),
+    CHECK (earnPoints > 0),
+    CHECK (redeemPoints > 0),
+    CHECK (redeemValueMinor > 0),
+    CHECK (minRedeemPoints >= 0),
+    CHECK (maxRedeemPercent BETWEEN 0 AND 100),
+    CHECK (pointsExpiryDays >= 0)
+);
+
+
+-- ============================================================
+-- 2. PROGRAM OUTLETS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_program_outlet (
+    id TEXT PRIMARY KEY,
+
+    programId TEXT NOT NULL,
+
+    -- References the existing POS outlet ID
+    outletId TEXT NOT NULL,
+
+    isActive INTEGER NOT NULL DEFAULT 1,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (programId)
+        REFERENCES loyalty_program(id)
+        ON DELETE RESTRICT,
+
+    UNIQUE(programId, outletId)
+);
+
+
+-- ============================================================
+-- 3. LOYALTY CUSTOMER
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_customer (
+    id TEXT PRIMARY KEY,
+
+    name TEXT NOT NULL,
+
+    phone TEXT NOT NULL UNIQUE,
+
+    email TEXT,
+
+    address TEXT,
+
+    dateOfBirth TEXT,
+
+    gender TEXT,
+
+    notes TEXT,
+
+    isActive INTEGER NOT NULL DEFAULT 1,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- ============================================================
+-- 4. LOYALTY TIER
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_tier (
+    id TEXT PRIMARY KEY,
+
+    programId TEXT NOT NULL,
+
+    tierName TEXT NOT NULL,
+
+    description TEXT,
+
+    -- Qualification thresholds
+    minLifetimeSpendMinor INTEGER NOT NULL DEFAULT 0,
+    minLifetimeEarnedPoints INTEGER NOT NULL DEFAULT 0,
+
+    -- 10000 = 1x earning multiplier
+    earnMultiplierBps INTEGER NOT NULL DEFAULT 10000,
+
+    bonusPoints INTEGER NOT NULL DEFAULT 0,
+
+    discountPercent REAL NOT NULL DEFAULT 0,
+
+    priority INTEGER NOT NULL DEFAULT 0,
+
+    isActive INTEGER NOT NULL DEFAULT 1,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (programId)
+        REFERENCES loyalty_program(id)
+        ON DELETE RESTRICT,
+
+    UNIQUE(programId, tierName),
+
+    CHECK (minLifetimeSpendMinor >= 0),
+    CHECK (minLifetimeEarnedPoints >= 0),
+    CHECK (earnMultiplierBps > 0),
+    CHECK (bonusPoints >= 0),
+    CHECK (discountPercent BETWEEN 0 AND 100)
+);
+
+
+-- ============================================================
+-- 5. LOYALTY ACCOUNT
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_account (
+    id TEXT PRIMARY KEY,
+
+    customerId TEXT NOT NULL,
+
+    programId TEXT NOT NULL,
+
+    tierId TEXT,
+
+    balancePoints INTEGER NOT NULL DEFAULT 0,
+
+    lifetimeEarned INTEGER NOT NULL DEFAULT 0,
+
+    lifetimeRedeemed INTEGER NOT NULL DEFAULT 0,
+
+    lifetimeExpired INTEGER NOT NULL DEFAULT 0,
+
+    lifetimeAdjusted INTEGER NOT NULL DEFAULT 0,
+
+    lifetimeSpendMinor INTEGER NOT NULL DEFAULT 0,
+
+    joinedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    lastActivityAt TEXT,
+
+    isActive INTEGER NOT NULL DEFAULT 1,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (customerId)
+        REFERENCES loyalty_customer(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (programId)
+        REFERENCES loyalty_program(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (tierId)
+        REFERENCES loyalty_tier(id)
+        ON DELETE SET NULL,
+
+    UNIQUE(customerId, programId),
+
+    CHECK (balancePoints >= 0),
+    CHECK (lifetimeEarned >= 0),
+    CHECK (lifetimeRedeemed >= 0),
+    CHECK (lifetimeExpired >= 0),
+    CHECK (lifetimeSpendMinor >= 0)
+);
+
+
+-- ============================================================
+-- 6. LOYALTY TRANSACTION LEDGER
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_transaction (
+    id TEXT PRIMARY KEY,
+
+    accountId TEXT NOT NULL,
+
+    transactionType TEXT NOT NULL,
+
+    -- Positive = credit
+    -- Negative = debit
+    points INTEGER NOT NULL,
+
+    balanceAfter INTEGER NOT NULL,
+
+    orderId TEXT,
+
+    orderNo TEXT,
+
+    outletId TEXT,
+
+    referenceTransactionId TEXT,
+
+    campaignId TEXT,
+
+    rewardRedemptionId TEXT,
+
+    idempotencyKey TEXT UNIQUE,
+
+    description TEXT,
+
+    businessDate TEXT,
+
+    createdBy TEXT,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (accountId)
+        REFERENCES loyalty_account(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (referenceTransactionId)
+        REFERENCES loyalty_transaction(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (campaignId)
+        REFERENCES loyalty_campaign(id)
+        ON DELETE SET NULL,
+
+    CHECK (
+        transactionType IN (
+            'EARN',
+            'REDEEM',
+            'EXPIRE',
+            'ADJUST',
+            'REVERSAL',
+            'REFERRAL',
+            'BONUS'
+        )
+    ),
+
+    CHECK (points != 0),
+    CHECK (balanceAfter >= 0)
+);
+
+
+-- ============================================================
+-- 7. POINT LOTS
+-- Every earning transaction creates a separate points lot.
+-- This makes expiry accurate.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_point_lot (
+    id TEXT PRIMARY KEY,
+
+    accountId TEXT NOT NULL,
+
+    transactionId TEXT NOT NULL UNIQUE,
+
+    originalPoints INTEGER NOT NULL,
+
+    remainingPoints INTEGER NOT NULL,
+
+    earnedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    expiresAt TEXT,
+
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (accountId)
+        REFERENCES loyalty_account(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (transactionId)
+        REFERENCES loyalty_transaction(id)
+        ON DELETE RESTRICT,
+
+    CHECK (originalPoints > 0),
+    CHECK (remainingPoints >= 0),
+    CHECK (remainingPoints <= originalPoints),
+
+    CHECK (
+        status IN (
+            'ACTIVE',
+            'PARTIALLY_USED',
+            'USED',
+            'EXPIRED',
+            'REVERSED'
+        )
+    )
+);
+
+
+-- ============================================================
+-- 8. POINT ALLOCATION
+-- Tracks exactly which points lots were used during redemption.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_point_allocation (
+    id TEXT PRIMARY KEY,
+
+    redemptionTransactionId TEXT NOT NULL,
+
+    pointLotId TEXT NOT NULL,
+
+    pointsUsed INTEGER NOT NULL,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (redemptionTransactionId)
+        REFERENCES loyalty_transaction(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (pointLotId)
+        REFERENCES loyalty_point_lot(id)
+        ON DELETE RESTRICT,
+
+    UNIQUE(redemptionTransactionId, pointLotId),
+
+    CHECK (pointsUsed > 0)
+);
+
+
+-- ============================================================
+-- 9. LOYALTY REWARDS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_reward (
+    id TEXT PRIMARY KEY,
+
+    programId TEXT NOT NULL,
+
+    rewardName TEXT NOT NULL,
+
+    description TEXT,
+
+    rewardType TEXT NOT NULL,
+
+    pointsRequired INTEGER NOT NULL,
+
+    -- Optional product reference from existing POS products
+    productId TEXT,
+
+    rewardValueMinor INTEGER NOT NULL DEFAULT 0,
+
+    stockQuantity INTEGER,
+
+    maxPerCustomer INTEGER,
+
+    validFrom TEXT,
+
+    validUntil TEXT,
+
+    isActive INTEGER NOT NULL DEFAULT 1,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (programId)
+        REFERENCES loyalty_program(id)
+        ON DELETE RESTRICT,
+
+    CHECK (
+        rewardType IN (
+            'DISCOUNT',
+            'FREE_PRODUCT',
+            'FREE_ITEM',
+            'FIXED_VALUE',
+            'CUSTOM'
+        )
+    ),
+
+    CHECK (pointsRequired > 0),
+    CHECK (rewardValueMinor >= 0),
+    CHECK (stockQuantity IS NULL OR stockQuantity >= 0)
+);
+
+
+-- ============================================================
+-- 10. REWARD REDEMPTION
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_reward_redemption (
+    id TEXT PRIMARY KEY,
+
+    accountId TEXT NOT NULL,
+
+    rewardId TEXT NOT NULL,
+
+    transactionId TEXT,
+
+    voucherId TEXT,
+
+    pointsSpent INTEGER NOT NULL,
+
+    status TEXT NOT NULL DEFAULT 'PENDING',
+
+    redeemedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    usedAt TEXT,
+
+    expiresAt TEXT,
+
+    outletId TEXT,
+
+    orderId TEXT,
+
+    createdBy TEXT,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (accountId)
+        REFERENCES loyalty_account(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (rewardId)
+        REFERENCES loyalty_reward(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (transactionId)
+        REFERENCES loyalty_transaction(id)
+        ON DELETE RESTRICT,
+
+    CHECK (pointsSpent > 0),
+
+    CHECK (
+        status IN (
+            'PENDING',
+            'ISSUED',
+            'USED',
+            'EXPIRED',
+            'CANCELLED'
+        )
+    )
+);
+
+
+-- ============================================================
+-- 11. LOYALTY VOUCHER / COUPON
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_voucher (
+    id TEXT PRIMARY KEY,
+
+    accountId TEXT,
+
+    rewardRedemptionId TEXT,
+
+    campaignId TEXT,
+
+    voucherCode TEXT NOT NULL UNIQUE,
+
+    voucherType TEXT NOT NULL,
+
+    discountValue REAL NOT NULL DEFAULT 0,
+
+    discountAmountMinor INTEGER NOT NULL DEFAULT 0,
+
+    maxDiscountMinor INTEGER,
+
+    minOrderAmountMinor INTEGER NOT NULL DEFAULT 0,
+
+    usageLimit INTEGER NOT NULL DEFAULT 1,
+
+    usedCount INTEGER NOT NULL DEFAULT 0,
+
+    validFrom TEXT,
+
+    validUntil TEXT,
+
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (accountId)
+        REFERENCES loyalty_account(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (rewardRedemptionId)
+        REFERENCES loyalty_reward_redemption(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (campaignId)
+        REFERENCES loyalty_campaign(id)
+        ON DELETE SET NULL,
+
+    CHECK (
+        voucherType IN (
+            'PERCENT',
+            'FIXED',
+            'FREE_ITEM'
+        )
+    ),
+
+    CHECK (discountValue >= 0),
+    CHECK (discountAmountMinor >= 0),
+    CHECK (minOrderAmountMinor >= 0),
+    CHECK (usageLimit > 0),
+    CHECK (usedCount >= 0),
+    CHECK (usedCount <= usageLimit),
+
+    CHECK (
+        status IN (
+            'ACTIVE',
+            'USED',
+            'EXPIRED',
+            'CANCELLED'
+        )
+    )
+);
+
+
+-- ============================================================
+-- 12. LOYALTY CAMPAIGNS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_campaign (
+    id TEXT PRIMARY KEY,
+
+    programId TEXT NOT NULL,
+
+    campaignName TEXT NOT NULL,
+
+    description TEXT,
+
+    campaignType TEXT NOT NULL,
+
+    -- Examples: multiplier 2x or bonus points
+    earnMultiplierBps INTEGER NOT NULL DEFAULT 10000,
+
+    bonusPoints INTEGER NOT NULL DEFAULT 0,
+
+    minOrderAmountMinor INTEGER NOT NULL DEFAULT 0,
+
+    maxBonusPoints INTEGER,
+
+    startDate TEXT NOT NULL,
+
+    endDate TEXT NOT NULL,
+
+    usageLimit INTEGER,
+
+    usedCount INTEGER NOT NULL DEFAULT 0,
+
+    isActive INTEGER NOT NULL DEFAULT 1,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (programId)
+        REFERENCES loyalty_program(id)
+        ON DELETE RESTRICT,
+
+    CHECK (
+        campaignType IN (
+            'DOUBLE_POINTS',
+            'BONUS_POINTS',
+            'MULTIPLIER',
+            'SPECIAL'
+        )
+    ),
+
+    CHECK (earnMultiplierBps > 0),
+    CHECK (bonusPoints >= 0),
+    CHECK (minOrderAmountMinor >= 0),
+    CHECK (usedCount >= 0)
+);
+
+
+-- ============================================================
+-- 13. LOYALTY REFERRALS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS loyalty_referral (
+    id TEXT PRIMARY KEY,
+
+    programId TEXT NOT NULL,
+
+    referrerAccountId TEXT NOT NULL,
+
+    referredCustomerId TEXT NOT NULL,
+
+    referralCode TEXT NOT NULL UNIQUE,
+
+    referralStatus TEXT NOT NULL DEFAULT 'PENDING',
+
+    referrerBonusPoints INTEGER NOT NULL DEFAULT 0,
+
+    referredBonusPoints INTEGER NOT NULL DEFAULT 0,
+
+    referrerTransactionId TEXT,
+
+    referredTransactionId TEXT,
+
+    completedOrderId TEXT,
+
+    referredAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    completedAt TEXT,
+
+    createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (programId)
+        REFERENCES loyalty_program(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (referrerAccountId)
+        REFERENCES loyalty_account(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (referredCustomerId)
+        REFERENCES loyalty_customer(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (referrerTransactionId)
+        REFERENCES loyalty_transaction(id)
+        ON DELETE RESTRICT,
+
+    FOREIGN KEY (referredTransactionId)
+        REFERENCES loyalty_transaction(id)
+        ON DELETE RESTRICT,
+
+    UNIQUE(programId, referredCustomerId),
+
+    CHECK (referrerBonusPoints >= 0),
+    CHECK (referredBonusPoints >= 0),
+
+    CHECK (
+        referralStatus IN (
+            'PENDING',
+            'COMPLETED',
+            'CANCELLED'
+        )
+    )
+);
+
+
+-- ============================================================
+-- INDEXES
+-- ============================================================
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_customer_name
+ON loyalty_customer(name);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_account_customer
+ON loyalty_account(customerId);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_account_program
+ON loyalty_account(programId);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_account_tier
+ON loyalty_account(tierId);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_transaction_account
+ON loyalty_transaction(accountId, createdAt);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_transaction_order
+ON loyalty_transaction(orderId);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_transaction_date
+ON loyalty_transaction(businessDate);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_point_lot_account
+ON loyalty_point_lot(accountId, status);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_point_lot_expiry
+ON loyalty_point_lot(expiresAt, status);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_allocation_lot
+ON loyalty_point_allocation(pointLotId);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_reward_program
+ON loyalty_reward(programId, isActive);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_reward_redemption_account
+ON loyalty_reward_redemption(accountId, status);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_voucher_code
+ON loyalty_voucher(voucherCode);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_voucher_account
+ON loyalty_voucher(accountId);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_campaign_dates
+ON loyalty_campaign(startDate, endDate, isActive);
+
+CREATE INDEX IF NOT EXISTS idx_loyalty_referral_account
+ON loyalty_referral(referrerAccountId);
+
 
 
 

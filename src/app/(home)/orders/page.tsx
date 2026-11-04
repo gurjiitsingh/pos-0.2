@@ -231,6 +231,7 @@ async function printBill(orderId: string) {
     const result = await window.posApi.print({
       role: 'BILL',
       source: 'POS',
+      taxCategory: "FOOD_GST",
       data: receiptData,
     });
 

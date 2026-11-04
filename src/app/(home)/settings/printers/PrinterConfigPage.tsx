@@ -175,7 +175,7 @@ async function save() {
         await window.posApi.print({
           role: role,
           source: 'SYSTEM',
-
+taxCategory: "FOOD_GST",
           data: {
             kotNumber: 'TEST',
             tableNo: 'T1',

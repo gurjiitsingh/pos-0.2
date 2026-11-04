@@ -336,6 +336,7 @@ if (items.length === 0) {
     const res = await window.posApi.print({
       role: 'BILL',
       source: 'POS',
+      taxCategory: "FOOD_GST",
       data: receiptData,
     });
 

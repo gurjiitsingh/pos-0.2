@@ -77,6 +77,7 @@ export default function LANPrinter() {
       const result = await window.posApi.print({
         role: 'BILL',
         source: 'SYSTEM',
+        taxCategory: "FOOD_GST",
         data: {
           kotNumber: 'TEST',
           tableNo: 'T1',

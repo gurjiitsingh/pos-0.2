@@ -187,6 +187,7 @@ let taxTotal = 0;
 let safeDeliveryTax = 0;
 let grandTotal = 0;
 let safeDiscount = 0;
+let itemTax1 = 0;
 
 if (billType === 'FOOD_GST') {
   mapping = getOrCreateOrderNo(db, tableNo, TERMINAL_CODE);
@@ -246,9 +247,8 @@ if (billType === 'FOOD_GST') {
     Number(liquorCalculation.cessPaiseForDisplay || 0);
 
   // Actual tax values from the raw calculation.
-  itemTax =
-    Number(liquorCalculation.raw.totalTaxPaise || 0) / 100;
-
+  itemTax = Number(liquorCalculation.vatPaiseForDisplay || 0) 
+itemTax1 =  Number(liquorCalculation.cessPaiseForDisplay || 0);
   safeDeliveryTax = 0;
   safeDeliveryFee = 0;
 
@@ -371,22 +371,22 @@ if (billType === 'FOOD_GST') {
 
     const insertMaster = db.prepare(`
       INSERT INTO pos_order_master (
-        id, srno, orderType, tableNo, tableName, saleType, reason,
+        id, srno, orderType,billType, tableNo, tableName, saleType, reason,
         customerName, customerPhone, customerId,
         createdById, createdByName, finalizedById, finalizedByName,
         dAddressLine1, dAddressLine2, dCity, dState, dZipcode, dLandmark,
-        deliveryFee, deliveryTax, itemTotal, itemTax, taxTotal, discountTotal, grandTotal,
+        deliveryFee, deliveryTax, itemTotal, itemTax, itemTax1, taxTotal, discountTotal, grandTotal,
         paymentMode, paymentStatus, paidAmount, dueAmount, orderStatus,
         source, deviceId, deviceName, appVersion,
         businessDate, realDate, createdAt, updatedAt,
         syncStatus, lastSyncedAt, notes
       )
       VALUES (
-        @id, @srno, @orderType, @tableNo, @tableName, @saleType, @reason,
+        @id, @srno, @orderType, @billType, @tableNo, @tableName, @saleType, @reason,
         @customerName, @customerPhone, @customerId,
         @createdById, @createdByName, @finalizedById, @finalizedByName,
         @dAddressLine1, @dAddressLine2, @dCity, @dState, @dZipcode, @dLandmark,
-        @deliveryFee, @deliveryTax, @itemTotal, @itemTax, @taxTotal, @discountTotal, @grandTotal,
+        @deliveryFee, @deliveryTax, @itemTotal, @itemTax, @itemTax1, @taxTotal, @discountTotal, @grandTotal,
         @paymentMode, @paymentStatus, @paidAmount, @dueAmount, @orderStatus,
         @source, @deviceId, @deviceName, @appVersion,
         @businessDate, @realDate, @createdAt, @updatedAt,
@@ -398,6 +398,7 @@ if (billType === 'FOOD_GST') {
       id: orderId,
       srno: srno,
       orderType: orderType,
+      billType: billType,
       tableNo: tableNo,
       tableName: tableName || '',
       saleType: saleType || '',
@@ -419,6 +420,7 @@ if (billType === 'FOOD_GST') {
       deliveryTax: safeDeliveryTax,
       itemTotal: itemTotal,
       itemTax: itemTax,
+      itemTax1: itemTax1,
       taxTotal: taxTotal,
       discountTotal: safeDiscount,
       grandTotal: grandTotal,
@@ -444,18 +446,18 @@ if (billType === 'FOOD_GST') {
 
     const insertItem = db.prepare(`
       INSERT INTO pos_order_items (
-        id, categoryName, productMode, currentStock, orderMasterId, productId,
+        id, categoryName,billType, productMode, currentStock, orderMasterId, productId,
         createdById, createdByName, name, categoryId, parentId, isVariant,
         basePrice, quantity, itemSubtotal, currency, status,
-        taxRate, taxType, taxAmountPerItem, taxTotal,
+        taxRate, taxType, taxRate1, taxType1, taxAmountPerItem, taxTotal,
         note, modifiersJson, modifierPrice, modifierSummary,
         finalPricePerItem, finalTotal, source, createdAt
       )
       VALUES (
-        @id, @categoryName, @productMode, @currentStock, @orderMasterId, @productId,
+        @id, @categoryName, @billType, @productMode, @currentStock, @orderMasterId, @productId,
         @createdById, @createdByName, @name, @categoryId, @parentId, @isVariant,
         @basePrice, @quantity, @itemSubtotal, @currency, @status,
-        @taxRate, @taxType, @taxAmountPerItem, @taxTotal,
+        @taxRate, @taxType, @taxRate1, @taxType1, @taxAmountPerItem, @taxTotal,
         @note, @modifiersJson, @modifierPrice, @modifierSummary,
         @finalPricePerItem, @finalTotal, @source, @createdAt
       )
