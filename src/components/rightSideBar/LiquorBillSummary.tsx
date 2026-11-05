@@ -12,10 +12,11 @@ type LiquorSummaryProps = {
   discountPercent: number;
 
   setBillDraft: (value: any) => void;
+
   billDraft: {
-    liquorDiscount: number;
-    liquorDiscountPercent: number;
-  };
+  liquorDiscount?: number;
+  liquorDiscountPercent?: number;
+};
 
   background: {
     border: string;

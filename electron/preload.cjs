@@ -648,6 +648,17 @@ getSalesReport: (
     endDate
   ),
 
+
+  getLiquorVatReport: (
+  startDate,
+  endDate
+) =>
+  ipcRenderer.invoke(
+    'saleReport:getReportLiquor',
+    startDate,
+    endDate
+  ),
+
   generateNextPosOrderNumber: (
     orderType
   ) =>

@@ -9,6 +9,7 @@ export default function TestPrinter() {
     const result = await window.posApi.print({
       role: 'KITCHEN',
       source: 'POS',
+      taxCategory:"FOOD_GST",
       data: {
         kotNumber: 'KOT-0001',
         tableNo: 'T1',

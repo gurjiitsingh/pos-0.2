@@ -9,6 +9,8 @@ export type KitchenItem = {
   quantity: number;
   taxRate?: number;
   taxType?: string;
+    taxRate1?: number;
+  taxType1?: string;
   taxCategory?: string;
   discountEligible?: boolean;
   note?: string;

@@ -1,0 +1,2094 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { usePosTheme } from '@/PosThemeStore/PosThemeContext';
+
+
+// =====================================================
+// TYPES   
+// =====================================================
+
+type SalesReport = {
+  overview: {
+    totalOrders: number;
+    totalSales: number;
+    totalDiscount: number;
+    totalTax: number;
+    totalPaid: number;
+    totalDue: number;
+  };
+
+  payments: {
+    cash: number;
+    card: number;
+    upi: number;
+    wallet: number;
+    credit: number;
+  };
+
+  categorySales: {
+    categoryId: string;
+    categoryName: string;
+    quantity: number;
+    sales: number;
+  }[];
+
+  productSales: {
+    productId: string;
+    productName: string;
+    categoryId: string;
+    categoryName: string;
+    quantity: number;
+    sales: number;
+  }[];
+
+  orderTypeSales: {
+    orderType: string;
+    orders: number;
+    sales: number;
+  }[];
+
+  staffSales: {
+    staffId: string;
+    staffName: string;
+    orders: number;
+    sales: number;
+  }[];
+
+  hourlySales: {
+    hour: string;
+    orders: number;
+    sales: number;
+  }[];
+};
+
+
+// =====================================================
+// PAGE
+// =====================================================
+
+export default function SalePage() {
+
+const {
+  theme,
+  background,
+  backgroundName,
+} = usePosTheme();
+
+
+  // ===================================================
+  // STATE
+  // ===================================================
+
+// ===================================================
+// REPORT PERIOD STATE
+// ===================================================
+
+const [selectedPeriod, setSelectedPeriod] =
+  useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
+
+const [selectedDate, setSelectedDate] =
+  useState('');
+
+const [selectedMonth, setSelectedMonth] =
+  useState('');
+
+const [customStartDate, setCustomStartDate] =
+  useState('');
+
+const [customEndDate, setCustomEndDate] =
+  useState('');
+
+// Currently loaded report range
+const [reportStartDate, setReportStartDate] =
+  useState('');
+
+const [reportEndDate, setReportEndDate] =
+  useState('');
+
+const [report, setReport] =
+  useState<SalesReport | null>(null);
+
+const [loading, setLoading] =
+  useState(true);
+
+const [error, setError] =
+  useState('');
+
+const [message, setMessage] =
+  useState('');
+
+const [printing, setPrinting] =
+  useState(false);
+
+// ===================================================
+// DATE HELPERS
+// ===================================================
+
+function getLocalDate(date: Date): string {
+
+  const year = date.getFullYear();
+
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, '0');
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+
+// ===================================================
+// GET REPORT DATE RANGE
+// ===================================================
+
+function getReportDateRange() {
+
+  // DAILY
+  if (selectedPeriod === 'daily') {
+
+    return {
+      startDate: selectedDate,
+      endDate: selectedDate,
+    };
+  }
+
+
+  // WEEKLY
+  if (selectedPeriod === 'weekly') {
+
+    if (!selectedDate) {
+      return null;
+    }
+
+    const date = new Date(
+      `${selectedDate}T00:00:00`
+    );
+
+    const day = date.getDay();
+
+    // Monday = 0
+    const diff =
+      day === 0 ? -6 : 1 - day;
+
+    const monday = new Date(date);
+
+    monday.setDate(
+      date.getDate() + diff
+    );
+
+    const sunday = new Date(monday);
+
+    sunday.setDate(
+      monday.getDate() + 6
+    );
+
+    return {
+      startDate: getLocalDate(monday),
+      endDate: getLocalDate(sunday),
+    };
+  }
+
+
+  // MONTHLY
+  if (selectedPeriod === 'monthly') {
+
+    if (!selectedMonth) {
+      return null;
+    }
+
+    const [year, month] =
+      selectedMonth.split('-').map(Number);
+
+    const firstDay =
+      `${selectedMonth}-01`;
+
+    const lastDay = getLocalDate(
+      new Date(year, month, 0)
+    );
+
+    return {
+      startDate: firstDay,
+      endDate: lastDay,
+    };
+  }
+
+
+  // CUSTOM
+  if (selectedPeriod === 'custom') {
+
+    if (
+      !customStartDate ||
+      !customEndDate ||
+      customStartDate > customEndDate
+    ) {
+      return null;
+    }
+
+    return {
+      startDate: customStartDate,
+      endDate: customEndDate,
+    };
+  }
+
+  return null;
+}
+
+
+// ===================================================
+// LOAD REPORT
+// ===================================================
+
+async function loadReport(
+  startDate: string,
+  endDate: string
+) {
+
+  if (
+    !startDate ||
+    !endDate ||
+    startDate > endDate
+  ) {
+    return;
+  }
+
+  try {
+
+    setLoading(true);
+
+    setError('');
+    setMessage('');
+
+    const result =
+      await window.posApi.getLiquorVatReport(
+        startDate,
+        endDate
+      );
+
+    console.log(
+      'SALES REPORT:',
+      {
+        startDate,
+        endDate,
+        result,
+      }
+    );
+
+    if (!result?.success) {
+
+      throw new Error(
+        result?.error ||
+        'Failed to load sales report'
+      );
+    }
+
+    setReport(
+      result.data || null
+    );
+
+    setReportStartDate(startDate);
+    setReportEndDate(endDate);
+
+  } catch (e: any) {
+
+    console.error(
+      'LOAD SALES REPORT FAILED',
+      e
+    );
+
+    setError(
+      e?.message ||
+      'Failed to load sales report'
+    );
+
+    setReport(null);
+
+  } finally {
+
+    setLoading(false);
+  }
+}
+
+
+// ===================================================
+// INITIAL DATE
+// ===================================================
+
+useEffect(() => {
+
+  const today = getLocalDate(new Date());
+
+  const currentMonth = today.slice(0, 7);
+
+  setSelectedDate(today);
+
+  setSelectedMonth(currentMonth);
+
+  loadReport(today, today);
+
+}, []);
+
+
+// ===================================================
+// PERIOD CHANGE
+// ===================================================
+
+async function handlePeriodChange(
+  period: 'daily' | 'weekly' | 'monthly' | 'custom'
+) {
+
+  setSelectedPeriod(period);
+
+  let range: {
+    startDate: string;
+    endDate: string;
+  } | null = null;
+
+
+  if (period === 'daily') {
+
+    range = {
+      startDate: selectedDate,
+      endDate: selectedDate,
+    };
+  }
+
+
+  if (period === 'weekly') {
+
+    const date = selectedDate ||
+      getLocalDate(new Date());
+
+    const temp = new Date(
+      `${date}T00:00:00`
+    );
+
+    const day = temp.getDay();
+
+    const diff =
+      day === 0 ? -6 : 1 - day;
+
+    const monday = new Date(temp);
+
+    monday.setDate(
+      temp.getDate() + diff
+    );
+
+    const sunday = new Date(monday);
+
+    sunday.setDate(
+      monday.getDate() + 6
+    );
+
+    range = {
+      startDate: getLocalDate(monday),
+      endDate: getLocalDate(sunday),
+    };
+  }
+
+
+  if (period === 'monthly') {
+
+    const month =
+      selectedMonth ||
+      getLocalDate(new Date()).slice(0, 7);
+
+    const [year, monthNumber] =
+      month.split('-').map(Number);
+
+    range = {
+      startDate: `${month}-01`,
+      endDate: getLocalDate(
+        new Date(year, monthNumber, 0)
+      ),
+    };
+  }
+
+
+  // Custom period waits for user date selection.
+  if (range) {
+
+    await loadReport(
+      range.startDate,
+      range.endDate
+    );
+  }
+}
+
+
+// ===================================================
+// DATE / MONTH CHANGE
+// ===================================================
+
+async function handleDateChange(
+  value: string
+) {
+
+  setSelectedDate(value);
+
+  if (!value) return;
+
+  if (
+    selectedPeriod === 'daily' ||
+    selectedPeriod === 'weekly'
+  ) {
+
+    const temp = new Date(
+      `${value}T00:00:00`
+    );
+
+    if (selectedPeriod === 'daily') {
+
+      await loadReport(value, value);
+
+    } else {
+
+      const day = temp.getDay();
+
+      const diff =
+        day === 0 ? -6 : 1 - day;
+
+      const monday = new Date(temp);
+
+      monday.setDate(
+        temp.getDate() + diff
+      );
+
+      const sunday = new Date(monday);
+
+      sunday.setDate(
+        monday.getDate() + 6
+      );
+
+      await loadReport(
+        getLocalDate(monday),
+        getLocalDate(sunday)
+      );
+    }
+  }
+}
+
+
+async function handleMonthChange(
+  value: string
+) {
+
+  setSelectedMonth(value);
+
+  if (!value) return;
+
+  const [year, month] =
+    value.split('-').map(Number);
+
+  await loadReport(
+    `${value}-01`,
+    getLocalDate(
+      new Date(year, month, 0)
+    )
+  );
+}
+
+
+// ===================================================
+// REFRESH
+// ===================================================
+
+async function handleRefresh() {
+
+  const range = getReportDateRange();
+
+  if (!range) {
+
+    setError(
+      'Please select a valid date range.'
+    );
+
+    return;
+  }
+
+  await loadReport(
+    range.startDate,
+    range.endDate
+  );
+}
+
+
+   
+
+
+ 
+
+
+  // ===================================================
+  // MONEY
+  // ===================================================
+
+  function money(
+    value: number
+  ) {
+
+    return `₹${Number(
+      value || 0
+    ).toFixed(2)}`;
+  }
+
+
+  // ===================================================
+  // DATE FORMAT
+  // ===================================================
+
+  function formatDate(
+    value: string
+  ) {
+
+    if (!value) {
+      return '-';
+    }
+
+    try {
+
+      return new Date(
+        `${value}T00:00:00`
+      ).toLocaleDateString(
+        'en-IN',
+        {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        }
+      );
+
+    } catch {
+
+      return value;
+
+    }
+  }
+
+
+
+  
+async function handlePrintReport() {
+
+  if (
+    !report ||
+    !reportStartDate ||
+    !reportEndDate ||
+    printing
+  ) {
+    return;
+  }
+
+  try {
+
+    setPrinting(true);
+
+    setError('');
+    setMessage('');
+
+
+    const reportData = {
+
+      reportTitle: 'SALES REPORT',
+
+      reportPeriod: selectedPeriod,
+
+      startDate: reportStartDate,
+
+      endDate: reportEndDate,
+
+      dateRangeLabel:
+        reportStartDate === reportEndDate
+          ? formatDate(reportStartDate)
+          : `${formatDate(reportStartDate)} - ${formatDate(reportEndDate)}`,
+
+      // Retain for compatibility with an
+      // existing daily report printer.
+      businessDate:
+        reportStartDate === reportEndDate
+          ? reportStartDate
+          : undefined,
+
+      printedAt: new Date().toISOString(),
+
+
+      overview: {
+        totalOrders: Number(
+          report.overview.totalOrders || 0
+        ),
+
+        totalSales: Number(
+          report.overview.totalSales || 0
+        ),
+
+        totalDiscount: Number(
+          report.overview.totalDiscount || 0
+        ),
+
+        totalTax: Number(
+          report.overview.totalTax || 0
+        ),
+
+        totalPaid: Number(
+          report.overview.totalPaid || 0
+        ),
+
+        totalDue: Number(
+          report.overview.totalDue || 0
+        ),
+      },
+
+
+      payments: {
+        cash: Number(report.payments.cash || 0),
+
+        card: Number(report.payments.card || 0),
+
+        upi: Number(report.payments.upi || 0),
+
+        wallet: Number(report.payments.wallet || 0),
+
+        credit: Number(report.payments.credit || 0),
+      },
+
+
+      categorySales: report.categorySales || [],
+
+      orderTypeSales: report.orderTypeSales || [],
+
+      productSales: report.productSales || [],
+
+      staffSales: report.staffSales || [],
+
+      hourlySales: report.hourlySales || [],
+
+    };
+
+
+    console.log(
+      '[REPORT PRINT] Data:',
+      reportData
+    );
+
+
+    const result = await window.posApi.print({
+
+      role: 'REPORT',
+
+      source: 'POS',
+
+      data: reportData,
+
+      taxCategory: 'REPORT',
+
+    });
+
+
+    console.log(
+      '[REPORT PRINT] Result:',
+      result
+    );
+
+
+    if (!result?.success) {
+
+      throw new Error(
+        result?.error ||
+        'Failed to print sales report.'
+      );
+    }
+
+
+    setMessage(
+      'Sales report sent to printer.'
+    );
+
+  } catch (e: any) {
+
+    console.error(
+      '[REPORT PRINT] Failed:',
+      e
+    );
+
+    setError(
+      e?.message ||
+      'Failed to print sales report.'
+    );
+
+  } finally {
+
+    setPrinting(false);
+  }
+}
+
+  // ===================================================
+  // LOADING
+  // ===================================================
+
+  if (loading) {
+
+    return (
+      <div
+        className={`
+          min-h-full
+          ${background.className}
+          ${background.text}
+          flex
+          items-center
+          justify-center
+          p-5
+        `}
+      >
+
+        <div
+          className={`
+            rounded-2xl
+            border
+            ${background.border}
+            px-6
+            py-5
+            text-sm
+            opacity-60
+          `}
+        >
+          Loading sales report...
+        </div>
+
+      </div>
+    );
+  }
+
+
+  // ===================================================
+  // DATA
+  // ===================================================
+
+  const overview =
+    report?.overview || {
+      totalOrders: 0,
+      totalSales: 0,
+      totalDiscount: 0,
+      totalTax: 0,
+      totalPaid: 0,
+      totalDue: 0,
+    };
+
+  const payments =
+    report?.payments || {
+      cash: 0,
+      card: 0,
+      upi: 0,
+      wallet: 0,
+      credit: 0,
+    };
+
+
+  // ===================================================
+  // RENDER
+  // ===================================================
+
+  return (
+
+ <div
+  className={`
+    h-full
+    min-h-0
+    overflow-y-auto
+    app-scrollbar
+    ${background.className}
+    ${background.text}
+    p-4
+    pb-8
+    md:p-5
+  `}
+>
+
+      {/* =================================================
+          HEADER
+      ================================================= */}
+<div
+  className={`
+    mb-4
+    flex
+    flex-col
+    gap-3
+    rounded-2xl
+    border
+    ${background.border}
+    p-4
+    shadow-sm
+    md:flex-row
+    md:items-center
+    md:justify-between
+  `}
+>
+  {/* TITLE */}
+  <div>
+    <h1 className="text-xl font-bold tracking-tight">
+      Sales Report
+    </h1>
+
+    <p className="mt-1 text-xs opacity-50">
+      Review sales, payments and product performance.
+    </p>
+  </div>
+
+  {/* REPORT CONTROLS */}
+  <div className="flex flex-wrap items-center gap-2">
+
+    {/* PERIOD SELECTOR */}
+    <div
+      className={`
+        flex
+        h-10
+        items-center
+        rounded-xl
+        border
+        ${background.border}
+        p-1
+      `}
+    >
+      {(
+        [
+          { value: 'daily', label: 'Daily' },
+          { value: 'weekly', label: 'Weekly' },
+          { value: 'monthly', label: 'Monthly' },
+          { value: 'custom', label: 'Custom' },
+        ] as const
+      ).map((period) => {
+        const active =
+          selectedPeriod === period.value;
+
+        return (
+          <button
+            key={period.value}
+            type="button"
+            onClick={() =>
+              handlePeriodChange(period.value)
+            }
+            className={`
+              h-8
+              rounded-lg
+              px-3
+              text-xs
+              font-semibold
+              transition
+              ${
+                active
+                  ? 'text-white shadow-sm'
+                  : 'opacity-60 hover:opacity-100'
+              }
+            `}
+            style={
+              active
+                ? {
+                    backgroundColor: theme.primary,
+                  }
+                : undefined
+            }
+          >
+            {period.label}
+          </button>
+        );
+      })}
+    </div>
+
+    {/* DAILY / WEEKLY DATE */}
+    {(selectedPeriod === 'daily' ||
+      selectedPeriod === 'weekly') && (
+      <div
+        className={`
+          flex
+          h-10
+          items-center
+          rounded-xl
+          border
+          ${background.border}
+          px-3
+        `}
+      >
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) =>
+            handleDateChange(e.target.value)
+          }
+          className="
+            h-full
+            cursor-pointer
+            bg-transparent
+            text-sm
+            font-semibold
+            outline-none
+          "
+          style={{
+            colorScheme:
+              backgroundName === 'darkSlate' ||
+              backgroundName === 'black' ||
+              backgroundName === 'dark'
+                ? 'dark'
+                : 'light',
+          }}
+        />
+      </div>
+    )}
+
+    {/* MONTHLY DATE */}
+    {selectedPeriod === 'monthly' && (
+      <div
+        className={`
+          flex
+          h-10
+          items-center
+          rounded-xl
+          border
+          ${background.border}
+          px-3
+        `}
+      >
+        <input
+          type="month"
+          value={selectedMonth}
+          onChange={(e) =>
+            handleMonthChange(e.target.value)
+          }
+          className="
+            h-full
+            cursor-pointer
+            bg-transparent
+            text-sm
+            font-semibold
+            outline-none
+          "
+          style={{
+            colorScheme:
+              backgroundName === 'darkSlate' ||
+              backgroundName === 'black' ||
+              backgroundName === 'dark'
+                ? 'dark'
+                : 'light',
+          }}
+        />
+      </div>
+    )}
+
+    {/* CUSTOM DATE RANGE */}
+    {selectedPeriod === 'custom' && (
+      <>
+        <div
+          className={`
+            flex
+            h-10
+            items-center
+            rounded-xl
+            border
+            ${background.border}
+            px-3
+          `}
+        >
+          <input
+            type="date"
+            value={customStartDate}
+            max={customEndDate || undefined}
+            onChange={(e) =>
+              setCustomStartDate(e.target.value)
+            }
+            className="
+              h-full
+              w-[125px]
+              cursor-pointer
+              bg-transparent
+              text-xs
+              font-semibold
+              outline-none
+            "
+            style={{
+              colorScheme:
+                backgroundName === 'darkSlate' ||
+                backgroundName === 'black' ||
+                backgroundName === 'dark'
+                  ? 'dark'
+                  : 'light',
+            }}
+          />
+        </div>
+
+        <span className="text-xs opacity-50">
+          To
+        </span>
+
+        <div
+          className={`
+            flex
+            h-10
+            items-center
+            rounded-xl
+            border
+            ${background.border}
+            px-3
+          `}
+        >
+          <input
+            type="date"
+            value={customEndDate}
+            min={customStartDate || undefined}
+            onChange={(e) =>
+              setCustomEndDate(e.target.value)
+            }
+            className="
+              h-full
+              w-[125px]
+              cursor-pointer
+              bg-transparent
+              text-xs
+              font-semibold
+              outline-none
+            "
+            style={{
+              colorScheme:
+                backgroundName === 'darkSlate' ||
+                backgroundName === 'black' ||
+                backgroundName === 'dark'
+                  ? 'dark'
+                  : 'light',
+            }}
+          />
+        </div>
+      </>
+    )}
+
+    {/* REFRESH */}
+    <button
+      type="button"
+      onClick={handleRefresh}
+      disabled={
+        loading ||
+        (selectedPeriod === 'custom' &&
+          (
+            !customStartDate ||
+            !customEndDate ||
+            customStartDate > customEndDate
+          ))
+      }
+      className="
+        h-10
+        rounded-xl
+        px-4
+        text-xs
+        font-semibold
+        text-white
+        transition
+        hover:opacity-90
+        disabled:cursor-not-allowed
+        disabled:opacity-50
+      "
+      style={{
+        backgroundColor: theme.primary,
+      }}
+    >
+      ↻ Refresh
+    </button>
+
+    {/* PRINT */}
+    <button
+      type="button"
+      onClick={handlePrintReport}
+      disabled={loading || printing || !report}
+      className="
+        h-10
+        rounded-xl
+        px-4
+        text-xs
+        font-semibold
+        text-white
+        transition
+        hover:opacity-90
+        disabled:cursor-not-allowed
+        disabled:opacity-50
+      "
+      style={{
+        backgroundColor: theme.primary,
+      }}
+    >
+      {printing ? 'Printing...' : '🖨 Print Report'}
+    </button>
+
+  </div>
+</div>
+
+
+      {/* =================================================
+          DATE
+      ================================================= */}
+
+  <div
+  className="
+    mb-4
+    text-xs
+    opacity-50
+  "
+>
+  Showing sales for{' '}
+
+  <span className="font-semibold opacity-100">
+
+    {reportStartDate && reportEndDate
+      ? reportStartDate === reportEndDate
+        ? formatDate(reportStartDate)
+        : `${formatDate(reportStartDate)} - ${formatDate(reportEndDate)}`
+      : '-'
+    }
+
+  </span>
+</div>
+
+
+      {/* =================================================
+          MESSAGE
+      ================================================= */}
+
+      {message && (
+
+        <div
+          className="
+            mb-4
+            rounded-xl
+            border
+            border-green-200
+            bg-green-50
+            px-4
+            py-3
+            text-sm
+            font-medium
+            text-green-700
+          "
+        >
+          {message}
+        </div>
+
+      )}
+
+
+      {/* =================================================
+          ERROR
+      ================================================= */}
+
+      {error && (
+
+        <div
+          className="
+            mb-4
+            rounded-xl
+            border
+            border-red-200
+            bg-red-50
+            px-4
+            py-3
+            text-sm
+            font-medium
+            text-red-700
+          "
+        >
+          {error}
+        </div>
+
+      )}
+
+
+      {/* =================================================
+          OVERVIEW
+      ================================================= */}
+
+      <div
+        className="
+          mb-4
+          grid
+          grid-cols-2
+          gap-3
+          md:grid-cols-3
+          xl:grid-cols-6
+        "
+      >
+
+        <SummaryCard
+          title="Orders"
+          value={String(
+            overview.totalOrders
+          )}
+          background={background}
+        />
+
+        <SummaryCard
+          title="Total Sales"
+          value={money(
+            overview.totalSales
+          )}
+          background={background}
+        />
+
+        <SummaryCard
+          title="Discount"
+          value={money(
+            overview.totalDiscount
+          )}
+          background={background}
+        />
+
+        <SummaryCard
+          title="Tax"
+          value={money(
+            overview.totalTax
+          )}
+          background={background}
+        />
+
+        <SummaryCard
+          title="Paid"
+          value={money(
+            overview.totalPaid
+          )}
+          background={background}
+        />
+
+        <SummaryCard
+          title="Due"
+          value={money(
+            overview.totalDue
+          )}
+          background={background}
+        />
+
+      </div>
+
+
+      {/* =================================================
+          PAYMENT BREAKDOWN
+      ================================================= */}
+
+      <SectionCard
+        title="Payment Breakdown"
+        background={background}
+      >
+
+        <div
+          className="
+            grid
+            grid-cols-2
+            gap-3
+            md:grid-cols-5
+          "
+        >
+
+          <PaymentCard
+            title="Cash"
+            value={payments.cash}
+          />
+
+          <PaymentCard
+            title="Card"
+            value={payments.card}
+          />
+
+          <PaymentCard
+            title="UPI"
+            value={payments.upi}
+          />
+
+          <PaymentCard
+            title="Wallet"
+            value={payments.wallet}
+          />
+
+          <PaymentCard
+            title="Credit"
+            value={payments.credit}
+          />
+
+        </div>
+
+      </SectionCard>
+
+
+      {/* =================================================
+          CATEGORY + ORDER TYPE
+      ================================================= */}
+
+      <div
+        className="
+          mt-4
+          grid
+          gap-4
+          lg:grid-cols-2
+        "
+      >
+
+        {/* CATEGORY */}
+
+        <SectionCard
+          title="Category Sales"
+          background={background}
+        >
+
+          <SalesTable
+            background={background}
+            headers={[
+              'Category',
+              'Qty',
+              'Sales',
+            ]}
+          >
+
+            {report?.categorySales?.length ? (
+
+              report.categorySales.map(
+                (item) => (
+
+                  <tr
+                    key={
+                      item.categoryId ||
+                      item.categoryName
+                    }
+                    className="
+                      border-b
+                      last:border-0
+                    "
+                    style={{
+                      borderColor:
+                        background.line,
+                    }}
+                  >
+
+                    <TableCell>
+                      {item.categoryName || '-'}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {item.quantity}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {money(item.sales)}
+                    </TableCell>
+
+                  </tr>
+
+                )
+              )
+
+            ) : (
+
+              <EmptyRow
+                colSpan={3}
+                background={background}
+              />
+
+            )}
+
+          </SalesTable>
+
+        </SectionCard>
+
+
+        {/* ORDER TYPE */}
+
+        <SectionCard
+          title="Sales by Order Type"
+          background={background}
+        >
+
+          <SalesTable
+            background={background}
+            headers={[
+              'Order Type',
+              'Orders',
+              'Sales',
+            ]}
+          >
+
+            {report?.orderTypeSales?.length ? (
+
+              report.orderTypeSales.map(
+                (item) => (
+
+                  <tr
+                    key={item.orderType}
+                    className="
+                      border-b
+                      last:border-0
+                    "
+                    style={{
+                      borderColor:
+                        background.line,
+                    }}
+                  >
+
+                    <TableCell>
+                      {item.orderType || '-'}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {item.orders}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {money(item.sales)}
+                    </TableCell>
+
+                  </tr>
+
+                )
+              )
+
+            ) : (
+
+              <EmptyRow
+                colSpan={3}
+                background={background}
+              />
+
+            )}
+
+          </SalesTable>
+
+        </SectionCard>
+
+      </div>
+
+
+      {/* =================================================
+          PRODUCT SALES
+      ================================================= */}
+
+      <div className="mt-4">
+
+        <SectionCard
+          title="Product Sales"
+          background={background}
+        >
+
+          <div
+            className="
+              max-h-[420px]
+              overflow-y-auto
+              app-scrollbar
+            "
+          >
+
+            <table
+              className="
+                w-full
+                border-collapse
+                text-sm
+              "
+            >
+
+              <thead>
+
+                <tr
+                  className="
+                    border-b
+                    text-left
+                  "
+                  style={{
+                    borderColor:
+                      background.line,
+                  }}
+                >
+
+                  <TableHeader>
+                    Product
+                  </TableHeader>
+
+                  <TableHeader>
+                    Category
+                  </TableHeader>
+
+                  <TableHeader align="right">
+                    Qty
+                  </TableHeader>
+
+                  <TableHeader align="right">
+                    Sales
+                  </TableHeader>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {report?.productSales?.length ? (
+
+                  report.productSales.map(
+                    (item) => (
+
+                      <tr
+                        key={
+                          item.productId
+                        }
+                        className="
+                          border-b
+                          last:border-0
+                        "
+                        style={{
+                          borderColor:
+                            background.line,
+                        }}
+                      >
+
+                        <TableCell>
+                          <span className="font-semibold">
+                            {item.productName}
+                          </span>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="opacity-60">
+                            {item.categoryName || '-'}
+                          </span>
+                        </TableCell>
+
+                        <TableCell align="right">
+                          {item.quantity}
+                        </TableCell>
+
+                        <TableCell align="right">
+                          {money(item.sales)}
+                        </TableCell>
+
+                      </tr>
+
+                    )
+                  )
+
+                ) : (
+
+                  <EmptyRow
+                    colSpan={4}
+                    background={background}
+                  />
+
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+        </SectionCard>
+
+      </div>
+
+
+      {/* =================================================
+          STAFF + HOURLY
+      ================================================= */}
+
+      <div
+        className="
+          mt-4
+          grid
+          gap-4
+          lg:grid-cols-2
+        "
+      >
+
+        {/* STAFF */}
+
+        <SectionCard
+          title="Staff Sales"
+          background={background}
+        >
+
+          <SalesTable
+            background={background}
+            headers={[
+              'Staff',
+              'Orders',
+              'Sales',
+            ]}
+          >
+
+            {report?.staffSales?.length ? (
+
+              report.staffSales.map(
+                (item, index) => (
+
+                  <tr
+                    key={
+                      item.staffId ||
+                      `${item.staffName}-${index}`
+                    }
+                    className="
+                      border-b
+                      last:border-0
+                    "
+                    style={{
+                      borderColor:
+                        background.line,
+                    }}
+                  >
+
+                    <TableCell>
+                      {item.staffName || 'Unknown'}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {item.orders}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {money(item.sales)}
+                    </TableCell>
+
+                  </tr>
+
+                )
+              )
+
+            ) : (
+
+              <EmptyRow
+                colSpan={3}
+                background={background}
+              />
+
+            )}
+
+          </SalesTable>
+
+        </SectionCard>
+
+
+        {/* HOURLY */}
+
+        <SectionCard
+          title="Hourly Sales"
+          background={background}
+        >
+
+          <SalesTable
+            background={background}
+            headers={[
+              'Hour',
+              'Orders',
+              'Sales',
+            ]}
+          >
+
+            {report?.hourlySales?.length ? (
+
+              report.hourlySales.map(
+                (item) => (
+
+                  <tr
+                    key={item.hour}
+                    className="
+                      border-b
+                      last:border-0
+                    "
+                    style={{
+                      borderColor:
+                        background.line,
+                    }}
+                  >
+
+                    <TableCell>
+                      {formatHour(
+                        item.hour
+                      )}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {item.orders}
+                    </TableCell>
+
+                    <TableCell align="right">
+                      {money(item.sales)}
+                    </TableCell>
+
+                  </tr>
+
+                )
+              )
+
+            ) : (
+
+              <EmptyRow
+                colSpan={3}
+                background={background}
+              />
+
+            )}
+
+          </SalesTable>
+
+        </SectionCard>
+
+      </div>
+
+
+      {/* =================================================
+          BOTTOM SPACE
+      ================================================= */}
+
+      <div className="h-8" />
+
+    </div>
+  );
+}
+
+
+// =====================================================
+// SUMMARY CARD
+// =====================================================
+
+function SummaryCard({
+  title,
+  value,
+  background,
+}: any) {
+
+  return (
+
+    <div
+      className={`
+        rounded-xl
+        border
+        ${background.border}
+        p-3
+        shadow-sm
+      `}
+    >
+
+      <p
+        className="
+          text-[11px]
+          uppercase
+          tracking-wider
+          opacity-45
+        "
+      >
+        {title}
+      </p>
+
+      <p
+        className="
+          mt-1
+          text-xl
+          font-bold
+        "
+      >
+        {value}
+      </p>
+
+    </div>
+  );
+}
+
+
+// =====================================================
+// SECTION CARD
+// =====================================================
+
+function SectionCard({
+  title,
+  children,
+  background,
+}: any) {
+
+  return (
+
+    <section
+      className={`
+        rounded-2xl
+        border
+        ${background.border}
+        p-4
+        shadow-sm
+      `}
+    >
+
+      <h2
+        className="
+          mb-3
+          text-sm
+          font-bold
+        "
+      >
+        {title}
+      </h2>
+
+      <div
+        className="
+          border-t
+          pt-3
+        "
+        style={{
+          borderColor:
+            background.line,
+        }}
+      >
+        {children}
+      </div>
+
+    </section>
+  );
+}
+
+
+// =====================================================
+// PAYMENT CARD
+// =====================================================
+
+function PaymentCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: number;
+}) {
+
+  return (
+
+    <div
+      className="
+        rounded-xl
+        border
+        p-3
+      "
+    >
+
+      <p
+        className="
+          text-xs
+          font-semibold
+          opacity-55
+        "
+      >
+        {title}
+      </p>
+
+      <p
+        className="
+          mt-1
+          text-lg
+          font-bold
+        "
+      >
+        ₹{Number(
+          value || 0
+        ).toFixed(2)}
+      </p>
+
+    </div>
+  );
+}
+
+
+// =====================================================
+// SALES TABLE
+// =====================================================
+
+function SalesTable({
+  headers,
+  children,
+  background,
+}: any) {
+
+  return (
+
+    <div
+      className="
+        overflow-x-auto
+      "
+    >
+
+      <table
+        className="
+          w-full
+          border-collapse
+          text-sm
+        "
+      >
+
+        <thead>
+
+          <tr
+            className="
+              border-b
+              text-left
+            "
+            style={{
+              borderColor:
+                background.line,
+            }}
+          >
+
+            {headers.map(
+              (
+                header: string,
+                index: number
+              ) => (
+
+                <TableHeader
+                  key={header}
+                  align={
+                    index === 0
+                      ? 'left'
+                      : 'right'
+                  }
+                >
+                  {header}
+                </TableHeader>
+
+              )
+            )}
+
+          </tr>
+
+        </thead>
+
+        <tbody>
+          {children}
+        </tbody>
+
+      </table>
+
+    </div>
+  );
+}
+
+
+// =====================================================
+// TABLE HEADER
+// =====================================================
+
+function TableHeader({
+  children,
+  align = 'left',
+}: {
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+}) {
+
+  return (
+
+    <th
+      className={`
+        px-2
+        py-2
+        text-[11px]
+        font-semibold
+        uppercase
+        tracking-wider
+        opacity-50
+        ${
+          align === 'right'
+            ? 'text-right'
+            : 'text-left'
+        }
+      `}
+    >
+      {children}
+    </th>
+  );
+}
+
+
+// =====================================================
+// TABLE CELL
+// =====================================================
+
+function TableCell({
+  children,
+  align = 'left',
+}: {
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+}) {
+
+  return (
+
+    <td
+      className={`
+        px-2
+        py-2.5
+        ${
+          align === 'right'
+            ? 'text-right'
+            : 'text-left'
+        }
+      `}
+    >
+      {children}
+    </td>
+  );
+}
+
+
+// =====================================================
+// EMPTY ROW
+// =====================================================
+
+function EmptyRow({
+  colSpan,
+  background,
+}: {
+  colSpan: number;
+  background: any;
+}) {
+
+  return (
+
+    <tr>
+
+      <td
+        colSpan={colSpan}
+        className="
+          px-3
+          py-8
+          text-center
+          text-xs
+          opacity-45
+        "
+      >
+        No sales data
+      </td>
+
+    </tr>
+  );
+}
+
+
+// =====================================================
+// HOUR FORMAT
+// =====================================================
+
+function formatHour(
+  hour: string
+) {
+
+  const numericHour =
+    Number(hour);
+
+  if (
+    Number.isNaN(numericHour)
+  ) {
+    return hour;
+  }
+
+  const suffix =
+    numericHour >= 12
+      ? 'PM'
+      : 'AM';
+
+  const displayHour =
+    numericHour % 12 || 12;
+
+  return `${displayHour}:00 ${suffix}`;
+}

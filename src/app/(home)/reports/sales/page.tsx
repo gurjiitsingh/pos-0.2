@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePosTheme } from '@/PosThemeStore/PosThemeContext';
+import Link from 'next/link';
 
 
 // =====================================================
@@ -1115,6 +1116,51 @@ async function handlePrintReport() {
     >
       {printing ? 'Printing...' : '🖨 Print Report'}
     </button>
+
+      <button
+      type="button"
+      onClick={handlePrintReport}
+      disabled={loading || printing || !report}
+      className="
+        h-10
+        rounded-xl
+        px-4
+        text-xs
+        font-semibold
+        text-white
+        transition
+        hover:opacity-90
+        disabled:cursor-not-allowed
+        disabled:opacity-50
+      "
+      style={{
+        backgroundColor: theme.primary,
+      }}
+    >
+      {printing ? 'Printing...' : '🖨 Print Report'}
+    </button>
+
+    <Link
+  href="/reports/sales/vat"
+  className="
+    inline-flex
+    h-10
+    items-center
+    justify-center
+    rounded-xl
+    px-4
+    text-xs
+    font-semibold
+    text-white
+    transition
+    hover:opacity-90
+  "
+  style={{
+    backgroundColor: theme.primary,
+  }}
+>
+  🖨 VAT Sales Report
+</Link>
 
   </div>
 </div>

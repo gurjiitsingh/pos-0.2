@@ -492,10 +492,9 @@ kotBatchId TEXT NOT NULL,
   note TEXT,
 
   taxRate REAL NOT NULL DEFAULT 0,
-
   taxType TEXT,
 
-     taxRate1 REAL,
+  taxRate1 REAL,
   taxType1 TEXT,
 
   taxAmountPerItem REAL NOT NULL DEFAULT 0,
@@ -682,6 +681,7 @@ CREATE TABLE IF NOT EXISTS pos_order_master (
   itemTotal REAL NOT NULL DEFAULT 0,
 
   itemTax REAL NOT NULL DEFAULT 0,
+  itemTax1 REAL NOT NULL DEFAULT 0,
 
   taxTotal REAL NOT NULL DEFAULT 0,
 
@@ -689,11 +689,11 @@ CREATE TABLE IF NOT EXISTS pos_order_master (
 -- TAX DETAILS
 -- =====================================================
 
-taxAmount REAL NOT NULL DEFAULT 0,
+-- taxAmount REAL NOT NULL DEFAULT 0,
 
-taxAmount1 REAL NOT NULL DEFAULT 0,
+-- taxAmount1 REAL NOT NULL DEFAULT 0,
 
-billType TEXT NOT NULL DEFAULT 'FOOD_GST',
+taxCategory TEXT NOT NULL DEFAULT 'FOOD_GST',
 
   discountTotal REAL NOT NULL DEFAULT 0,
 
@@ -923,6 +923,8 @@ CREATE TABLE IF NOT EXISTS pos_order_payments (
 
   ownerId TEXT NOT NULL,
   outletId TEXT NOT NULL,
+
+   taxCategory TEXT NOT NULL,
 
   amount REAL NOT NULL,
 

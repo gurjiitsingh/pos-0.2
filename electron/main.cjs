@@ -107,6 +107,9 @@ const {
 const saleReportRepo =
   require('./db/saleReportRepo.cjs');
 
+const saleLquorVatReportRepository =
+  require('./db/saleLquorVatReportRepository.cjs');
+
 const {
   getAllCategories,
 } = require('./db/categoryRepo.cjs');
@@ -2195,7 +2198,48 @@ ipcMain.handle(
   }
 );
 
+ipcMain.handle(
+  'saleReport:getReportLiquor',
+  async (_event, startDate, endDate) => {
 
+    try {
+
+      if (
+        !startDate ||
+        !endDate ||
+        startDate > endDate
+      ) {
+        return {
+          success: false,
+          error: 'Valid start and end dates are required',
+        };
+      }
+
+      const report =
+        saleLquorVatReportRepository.getLiquorVatReport(
+          startDate,
+          endDate
+        );
+
+      return {
+        success: true,
+        data: report,
+      };
+
+    } catch (e) {
+
+      console.error(
+        'LIQUOR VAT REPORT IPC ERROR:',
+        e
+      );
+
+      return {
+        success: false,
+        error: e?.message || String(e),
+      };
+    }
+  }
+);
   // =====================================================
   // UPLOAD DATA
   // =====================================================

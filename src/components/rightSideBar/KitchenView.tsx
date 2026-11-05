@@ -279,177 +279,177 @@ export default function KitchenView({
   // FINALIZE BILL
   // =====================================================
 
-  async function handleCheckout() {
+  // async function handleCheckout() {
 
-    if (processing) {
-      return;
-    }
+  //   if (processing) {
+  //     return;
+  //   }
 
-    if (!currentTableId) {
+  //   if (!currentTableId) {
 
-      setError(
-        'No table or order selected'
-      );
+  //     setError(
+  //       'No table or order selected'
+  //     );
 
-      return;
-    }
+  //     return;
+  //   }
 
-    if (
-      billItems.length === 0
-    ) {
+  //   if (
+  //     billItems.length === 0
+  //   ) {
 
-      setError(
-        'No kitchen items'
-      );
+  //     setError(
+  //       'No kitchen items'
+  //     );
 
-      return;
-    }
+  //     return;
+  //   }
 
-    try {
+  //   try {
 
-      setProcessing(true);
-      setError(null);
+  //     setProcessing(true);
+  //     setError(null);
 
-      console.log(
-        'CHECKOUT:',
-        {
-          currentTableId,
-          currentTableName,
-          orderType,
-          billItems,
-        }
-      );
+  //     console.log(
+  //       'CHECKOUT:',
+  //       {
+  //         currentTableId,
+  //         currentTableName,
+  //         orderType,
+  //         billItems,
+  //       }
+  //     );
 
-      // =================================================
-      // CREATE BILL
-      // =================================================
+  //     // =================================================
+  //     // CREATE BILL
+  //     // =================================================
 
-      const result =
-        await window.posApi.createBill({
+  //     const result =
+  //       await window.posApi.createBill({
 
-          // DINE_IN => T1
-          // TAKEAWAY => TW1
-          // DELIVERY => DL1
+  //         // DINE_IN => T1
+  //         // TAKEAWAY => TW1
+  //         // DELIVERY => DL1
 
-          tableNo:
-            currentTableId,
+  //         tableNo:
+  //           currentTableId,
 
-          tableName:
-            currentTableName,
+  //         tableName:
+  //           currentTableName,
 
-          orderType,
+  //         orderType,
 
-          customerName:
-            customerName.trim() ||
-            'Customer',
+  //         customerName:
+  //           customerName.trim() ||
+  //           'Customer',
 
-          customerPhone:
-            customerPhone.trim(),
+  //         customerPhone:
+  //           customerPhone.trim(),
 
-          discountTotal:
-            calculation.discount,
+  //         discountTotal:
+  //           calculation.discount,
 
-          deliveryFee:
-            calculation.deliveryFee,
+  //         deliveryFee:
+  //           calculation.deliveryFee,
 
-          deliveryTax:
-            0,
+  //         deliveryTax:
+  //           0,
 
-          paymentMode,
+  //         paymentMode,
 
-          paymentStatus,
+  //         paymentStatus,
 
-          paidAmount:
-            Number(paidAmount) || 0,
+  //         paidAmount:
+  //           Number(paidAmount) || 0,
 
-          payments:
-            paidAmount > 0
-              ? [
-                  {
-                    mode:
-                      paymentMode,
+  //         payments:
+  //           paidAmount > 0
+  //             ? [
+  //                 {
+  //                   mode:
+  //                     paymentMode,
 
-                    amount:
-                      Number(
-                        paidAmount
-                      ),
-                  },
-                ]
-              : [],
+  //                   amount:
+  //                     Number(
+  //                       paidAmount
+  //                     ),
+  //                 },
+  //               ]
+  //             : [],
 
-          deviceId:
-            'POS',
+  //         deviceId:
+  //           'POS',
 
-          deviceName:
-            'Electron POS',
+  //         deviceName:
+  //           'Electron POS',
 
-          appVersion:
-            '1.0',
+  //         appVersion:
+  //           '1.0',
 
-          businessDate:
-            new Date()
-              .toISOString()
-              .slice(0, 10),
+  //         businessDate:
+  //           new Date()
+  //             .toISOString()
+  //             .slice(0, 10),
 
-          currency:
-            '₹',
-        });
+  //         currency:
+  //           '₹',
+  //       });
 
-      if (
-        !result?.success
-      ) {
+  //     if (
+  //       !result?.success
+  //     ) {
 
-        throw new Error(
-          result?.error ||
-          'Failed to create bill'
-        );
-      }
+  //       throw new Error(
+  //         result?.error ||
+  //         'Failed to create bill'
+  //       );
+  //     }
 
-      console.log(
-        'BILL CREATED:',
-        result
-      );
+  //     console.log(
+  //       'BILL CREATED:',
+  //       result
+  //     );
 
-      // =================================================
-      // CLEAR KITCHEN UI
-      // =================================================
+  //     // =================================================
+  //     // CLEAR KITCHEN UI
+  //     // =================================================
 
-      setKitchenItems([]);
+  //     setKitchenItems([]);
 
-      // =================================================
-      // RELOAD
-      // =================================================
+  //     // =================================================
+  //     // RELOAD
+  //     // =================================================
 
-      await loadKitchen();
+  //     await loadKitchen();
 
-      // =================================================
-      // RETURN TO CART
-      // =================================================
+  //     // =================================================
+  //     // RETURN TO CART
+  //     // =================================================
 
-      setRightSidebarView(
-        'cart'
-      );
+  //     setRightSidebarView(
+  //       'cart'
+  //     );
 
-      onSuccess?.();
+  //     onSuccess?.();
 
-    } catch (e: any) {
+  //   } catch (e: any) {
 
-      console.error(
-        'BILL FAILED',
-        e
-      );
+  //     console.error(
+  //       'BILL FAILED',
+  //       e
+  //     );
 
-      setError(
-        e?.message ||
-        'Payment failed'
-      );
+  //     setError(
+  //       e?.message ||
+  //       'Payment failed'
+  //     );
 
-    } finally {
+  //   } finally {
 
-      setProcessing(false);
+  //     setProcessing(false);
 
-    }
-  }
+  //   }
+  // }
 
   // =====================================================
   // ORDER TYPE LABEL

@@ -61,7 +61,7 @@ function getBillableKotItems(tableNo) {
 
 
 
-async function createBillFromKitchen(input) {
+async function createBillFromKitchen_OLD(input) {
   const { tableNo, calculation,
     calculationLiquorVat, } = input || {};
   if (!tableNo) throw new Error('tableNo is required');
@@ -97,12 +97,216 @@ async function createBillFromKitchen(input) {
 }
 
 
+async function createBillFromKitchen(input) {
+  const {
+    tableNo,
+    calculation,
+    calculationLiquorVat,
+  } = input || {};
+
+  if (!tableNo) throw new Error('tableNo is required');
+
+  // Read billable items only once
+  const kotItems = getBillableKotItems(tableNo);
+
+  if (!kotItems.length) {
+    throw new Error(`No billable kitchen items found for table ${tableNo}`);
+  }
+
+  // Split items by tax category
+  const gstItems = kotItems.filter(
+    (item) => item.taxCategory !== 'LIQUOR_VAT'
+  );
+
+  const liquorVatItems = kotItems.filter(
+    (item) => item.taxCategory === 'LIQUOR_VAT'
+  );
+
+  // Get category-wise bill totals (currency units)
+  const gstTotal = gstItems.length
+    ? Number(calculation?.grandTotal || 0)
+    : 0;
+
+  const liquorTotal = liquorVatItems.length
+    ? Number(calculationLiquorVat?.grandTotal || 0)
+    : 0;
+
+  const combinedTotal = gstTotal + liquorTotal;
+
+  // Read actual payments
+  let sourcePayments = Array.isArray(input.payments)
+    ? input.payments
+        .map((p) => ({
+          ...p,
+          amount: Math.max(0, Number(p.amount || 0)),
+        }))
+        .filter((p) => p.amount > 0)
+    : [];
+
+  // Fallback to paidAmount if payment array is empty/zero
+  if (sourcePayments.length === 0) {
+    const totalPaid = Math.max(0, Number(input.paidAmount || 0));
+
+    if (totalPaid > 0) {
+      sourcePayments = [{
+        mode: input.paymentMode || 'CASH',
+        amount: totalPaid,
+      }];
+    }
+  }
+
+  const totalPaid = sourcePayments.reduce(
+    (sum, p) => sum + p.amount,
+    0
+  );
+
+  // Allocate each payment proportionally
+  let gstPayments = [];
+  let liquorPayments = [];
+
+  if (combinedTotal > 0 && totalPaid > 0) {
+    let gstAllocatedTotal = 0;
+
+    sourcePayments.forEach((payment, index) => {
+      let gstAmount;
+      let liquorAmount;
+
+      if (!gstItems.length) {
+        gstAmount = 0;
+        liquorAmount = payment.amount;
+      } else if (!liquorVatItems.length) {
+        gstAmount = payment.amount;
+        liquorAmount = 0;
+      } else if (index === sourcePayments.length - 1) {
+        // Give the rounding remainder to liquor
+        gstAmount = Number(
+          (totalPaid > 0
+            ? payment.amount * gstTotal / combinedTotal
+            : 0).toFixed(2)
+        );
+
+        liquorAmount = Number(
+          (payment.amount - gstAmount).toFixed(2)
+        );
+      } else {
+        gstAmount = Number(
+          (payment.amount * gstTotal / combinedTotal).toFixed(2)
+        );
+
+        liquorAmount = Number(
+          (payment.amount - gstAmount).toFixed(2)
+        );
+      }
+
+      if (gstAmount > 0) {
+        gstPayments.push({
+          ...payment,
+          amount: gstAmount,
+        });
+      }
+
+      if (liquorAmount > 0) {
+        liquorPayments.push({
+          ...payment,
+          amount: liquorAmount,
+        });
+      }
+
+      gstAllocatedTotal += gstAmount;
+    });
+  }
+
+  const gstPaidAmount = Number(
+    gstPayments.reduce((sum, p) => sum + p.amount, 0).toFixed(2)
+  );
+
+  const liquorPaidAmount = Number(
+    liquorPayments.reduce((sum, p) => sum + p.amount, 0).toFixed(2)
+  );
+
+  console.log('[PAYMENT ALLOCATION]', {
+    gstTotal,
+    liquorTotal,
+    combinedTotal,
+    totalPaid,
+    gstPaidAmount,
+    liquorPaidAmount,
+    gstPayments,
+    liquorPayments,
+  });
+
+  const results = [];
+
+  // Save GST order with GST payment allocation
+  if (gstItems.length > 0) {
+    results.push(
+      await savOrder(
+        {
+          ...input,
+          paidAmount: gstPaidAmount,
+          payments: gstPayments,
+        },
+        gstItems,
+        'FOOD_GST'
+      )
+    );
+  }
+
+  // Save Liquor VAT order with liquor payment allocation
+  if (liquorVatItems.length > 0) {
+    results.push(
+      await savOrder(
+        {
+          ...input,
+          paidAmount: liquorPaidAmount,
+          payments: liquorPayments,
+        },
+        liquorVatItems,
+        'LIQUOR_VAT'
+      )
+    );
+  }
+
+  // Complete KOT items only after every category order has saved
+  const cleanupKot = db.transaction(() => {
+    db.prepare(`
+      UPDATE pos_kot_items
+      SET status = 'PAID'
+      WHERE tableNo = ?
+        AND status IN ('PENDING', 'DONE')
+    `).run(tableNo);
+
+    const deleted = db.prepare(`
+      DELETE FROM pos_kot_items
+      WHERE tableNo = ?
+        AND UPPER(COALESCE(status, '')) IN ('PAID', 'DELETED')
+    `).run(tableNo);
+
+    console.log(
+      '[BILL CLEANUP] KOT items removed:',
+      deleted.changes,
+      'table:',
+      tableNo
+    );
+  });
+
+  cleanupKot();
+
+  return {
+    success: true,
+    orders: results,
+    orderCount: results.length,
+  };
+}
+
 
 
 
 
 async function savOrder(input, items, billType) {
 
+
+  
  //console.log("items--------------------------------",items)
 
   const {
@@ -269,11 +473,17 @@ itemTax1 =  Number(liquorCalculation.cessPaiseForDisplay || 0);
   const quantity = Number(kot.quantity || 0);
   const basePrice = Number(kot.basePrice || 0);
   const taxRate = Number(kot.taxRate || 0);
-
+ const taxRate1 = Number(kot.taxRate1 || 0);
   const taxType =
     (kot.taxType || 'exclusive').toLowerCase() === 'inclusive'
       ? 'inclusive'
       : 'exclusive';
+
+       const taxType1 =
+    (kot.taxType1 || 'exclusive').toLowerCase() === 'inclusive'
+      ? 'inclusive'
+      : 'exclusive';
+
 
   // Calculate this individual product's subtotal.
   const itemSubtotal = basePrice * quantity;
@@ -297,6 +507,7 @@ itemTax1 =  Number(liquorCalculation.cessPaiseForDisplay || 0);
   return {
     id: uuid(),
     categoryName: kot.categoryName || '',
+    taxCategory: billType,
     productMode: kot.productMode || '',
     currentStock: Number(kot.currentStock || 0),
     orderMasterId: orderId,
@@ -316,9 +527,11 @@ itemTax1 =  Number(liquorCalculation.cessPaiseForDisplay || 0);
     status: kot.status === 'OPEN' ? 'DONE' : kot.status,
 
     taxRate,
-    taxType,
-    taxAmountPerItem: itemTaxAmount / quantity,
-    taxTotal: itemTaxAmount,
+taxType,
+taxRate1,
+taxType1,
+taxAmountPerItem: itemTaxAmount / quantity,
+taxTotal: itemTaxAmount,
 
     note: kot.note || '',
     modifiersJson: kot.modifiersJson || '[]',
@@ -369,36 +582,36 @@ itemTax1 =  Number(liquorCalculation.cessPaiseForDisplay || 0);
 
     // 1. INSERT ORDER MASTER
 
-    const insertMaster = db.prepare(`
-      INSERT INTO pos_order_master (
-        id, srno, orderType,billType, tableNo, tableName, saleType, reason,
-        customerName, customerPhone, customerId,
-        createdById, createdByName, finalizedById, finalizedByName,
-        dAddressLine1, dAddressLine2, dCity, dState, dZipcode, dLandmark,
-        deliveryFee, deliveryTax, itemTotal, itemTax, itemTax1, taxTotal, discountTotal, grandTotal,
-        paymentMode, paymentStatus, paidAmount, dueAmount, orderStatus,
-        source, deviceId, deviceName, appVersion,
-        businessDate, realDate, createdAt, updatedAt,
-        syncStatus, lastSyncedAt, notes
-      )
-      VALUES (
-        @id, @srno, @orderType, @billType, @tableNo, @tableName, @saleType, @reason,
-        @customerName, @customerPhone, @customerId,
-        @createdById, @createdByName, @finalizedById, @finalizedByName,
-        @dAddressLine1, @dAddressLine2, @dCity, @dState, @dZipcode, @dLandmark,
-        @deliveryFee, @deliveryTax, @itemTotal, @itemTax, @itemTax1, @taxTotal, @discountTotal, @grandTotal,
-        @paymentMode, @paymentStatus, @paidAmount, @dueAmount, @orderStatus,
-        @source, @deviceId, @deviceName, @appVersion,
-        @businessDate, @realDate, @createdAt, @updatedAt,
-        @syncStatus, @lastSyncedAt, @notes
-      )
-    `);
+const insertMaster = db.prepare(`
+  INSERT INTO pos_order_master (
+    id, srno, orderType, taxCategory, tableNo, tableName, saleType, reason,
+    customerName, customerPhone, customerId,
+    createdById, createdByName, finalizedById, finalizedByName,
+    dAddressLine1, dAddressLine2, dCity, dState, dZipcode, dLandmark,
+    deliveryFee, deliveryTax, itemTotal, itemTax, itemTax1, taxTotal, discountTotal, grandTotal,
+    paymentMode, paymentStatus, paidAmount, dueAmount, orderStatus,
+    source, deviceId, deviceName, appVersion,
+    businessDate, realDate, createdAt, updatedAt,
+    syncStatus, lastSyncedAt, notes
+  )
+  VALUES (
+    @id, @srno, @orderType, @taxCategory, @tableNo, @tableName, @saleType, @reason,
+    @customerName, @customerPhone, @customerId,
+    @createdById, @createdByName, @finalizedById, @finalizedByName,
+    @dAddressLine1, @dAddressLine2, @dCity, @dState, @dZipcode, @dLandmark,
+    @deliveryFee, @deliveryTax, @itemTotal, @itemTax, @itemTax1, @taxTotal, @discountTotal, @grandTotal,
+    @paymentMode, @paymentStatus, @paidAmount, @dueAmount, @orderStatus,
+    @source, @deviceId, @deviceName, @appVersion,
+    @businessDate, @realDate, @createdAt, @updatedAt,
+    @syncStatus, @lastSyncedAt, @notes
+  )
+`);
 
     insertMaster.run({
       id: orderId,
       srno: srno,
       orderType: orderType,
-      billType: billType,
+      taxCategory: billType,
       tableNo: tableNo,
       tableName: tableName || '',
       saleType: saleType || '',
@@ -446,7 +659,7 @@ itemTax1 =  Number(liquorCalculation.cessPaiseForDisplay || 0);
 
     const insertItem = db.prepare(`
       INSERT INTO pos_order_items (
-        id, categoryName,billType, productMode, currentStock, orderMasterId, productId,
+        id, categoryName,taxCategory, productMode, currentStock, orderMasterId, productId,
         createdById, createdByName, name, categoryId, parentId, isVariant,
         basePrice, quantity, itemSubtotal, currency, status,
         taxRate, taxType, taxRate1, taxType1, taxAmountPerItem, taxTotal,
@@ -454,7 +667,7 @@ itemTax1 =  Number(liquorCalculation.cessPaiseForDisplay || 0);
         finalPricePerItem, finalTotal, source, createdAt
       )
       VALUES (
-        @id, @categoryName, @billType, @productMode, @currentStock, @orderMasterId, @productId,
+        @id, @categoryName, @taxCategory, @productMode, @currentStock, @orderMasterId, @productId,
         @createdById, @createdByName, @name, @categoryId, @parentId, @isVariant,
         @basePrice, @quantity, @itemSubtotal, @currency, @status,
         @taxRate, @taxType, @taxRate1, @taxType1, @taxAmountPerItem, @taxTotal,
@@ -465,43 +678,52 @@ itemTax1 =  Number(liquorCalculation.cessPaiseForDisplay || 0);
 
     for (const item of orderItems) insertItem.run(item);
 
-    // 3. INSERT PAYMENTS
+// 3. INSERT PAYMENTS
 
-    const insertPayment = db.prepare(`
-      INSERT INTO pos_order_payments (
-        id, orderId, ownerId, outletId, amount, mode,
-        provider, method, status, deviceId, createdAt, businessDate,
-        syncStatus, lastSyncedAt, isVoided
-      )
-      VALUES (
-        @id, @orderId, @ownerId, @outletId, @amount, @mode,
-        @provider, @method, @status, @deviceId, @createdAt, @businessDate,
-        @syncStatus, @lastSyncedAt, @isVoided
-      )
-    `);
+console.log('========== PAYMENT DEBUG ==========');
+console.log('BILL TYPE:', billType);
+console.log('GRAND TOTAL:', grandTotal);
+console.log('PAID AMOUNT:', paidAmount);
+console.log('PAYMENTS INPUT:', payments);
+console.log('FINAL PAYMENTS:', finalPayments);
+console.log('===================================');
 
-    for (const payment of finalPayments) {
-      const amount = Number(payment.amount || 0);
-      if (amount <= 0) continue;
-      insertPayment.run({
-        id: uuid(),
-        orderId: orderId,
-        ownerId: ownerId,
-        outletId: outletId,
-        amount: amount,
-        mode: payment.mode || paymentMode,
-        provider: payment.provider || null,
-        method: payment.method || null,
-        status: 'SUCCESS',
-        deviceId: deviceId,
-        createdAt: now,
-        businessDate: finalBusinessDate,
-        syncStatus: 'PENDING',
-        lastSyncedAt: null,
-        isVoided: 0,
-      });
-    }
+const insertPayment = db.prepare(`
+  INSERT INTO pos_order_payments (
+    id, orderId, ownerId, outletId, taxCategory, amount, mode,
+    provider, method, status, deviceId, createdAt, businessDate,
+    syncStatus, lastSyncedAt, isVoided
+  )
+  VALUES (
+    @id, @orderId, @ownerId, @outletId, @taxCategory, @amount, @mode,
+    @provider, @method, @status, @deviceId, @createdAt, @businessDate,
+    @syncStatus, @lastSyncedAt, @isVoided
+  )
+`);
 
+for (const payment of finalPayments) {
+  const amount = Number(payment.amount || 0);
+  if (amount <= 0) continue;
+
+  insertPayment.run({
+    id: uuid(),
+    orderId: orderId,
+    ownerId: ownerId,
+    outletId: outletId,
+    taxCategory: billType,
+    amount: amount,
+    mode: payment.mode || paymentMode,
+    provider: payment.provider || null,
+    method: payment.method || null,
+    status: 'SUCCESS',
+    deviceId: deviceId,
+    createdAt: now,
+    businessDate: finalBusinessDate,
+    syncStatus: 'PENDING',
+    lastSyncedAt: null,
+    isVoided: 0,
+  });
+}
     // 4. CLEAR ONLY THIS CATEGORY'S SERIAL MAPPING
 
     if (billType === 'FOOD_GST') clearMapping(db, tableNo);
