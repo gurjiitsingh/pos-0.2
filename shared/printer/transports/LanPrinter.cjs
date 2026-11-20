@@ -5,7 +5,7 @@ class LanPrinter {
     // =====================================================
     // TEST MODE — DO NOT CONNECT TO A PHYSICAL PRINTER
     // =====================================================
-    const TEST_MODE = true;
+    const TEST_MODE = false;
 
     if (TEST_MODE) {
       console.log('========== LAN PRINTER TEST MODE ==========');

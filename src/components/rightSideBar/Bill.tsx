@@ -655,8 +655,14 @@ console.log("billType 2--------------------------------",billType)
     // 1. CALCULATE FINAL TOTAL
     // =================================================
 
-    const totalAmount = Number(calculation.grandTotal) || 0; 
+    // const totalAmount = Number(calculation.grandTotal) || 0; 
 
+    const gstTotal = Number(calculation.grandTotal) || 0;
+
+const liquorTotal =
+  Number(calculationLiquorVat?.grandTotal) || 0;
+
+const totalAmount = gstTotal + liquorTotal;
     // =================================================
     // 2. CREATE BILL
     // =================================================

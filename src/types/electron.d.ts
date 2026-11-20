@@ -571,7 +571,13 @@ declare global {
       getOrdersByRealDate: (
         date: string
       ) => Promise<any>;
+
       getSalesReport: (
+        businessDate: string,
+        endDate: string
+      ) => Promise<any>;
+
+          getLiquorVatReport: (
         businessDate: string,
         endDate: string
       ) => Promise<any>;
