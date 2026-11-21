@@ -169,7 +169,7 @@ export default function CartPanel() {
       // =================================================
       // COMMON ITEM DATA
       // =================================================
-      // console.log("cartData-----------------", cartData)
+       console.log("cartData-----------------", cartData)
       const convertedCartData =
         cartData.map((item) => ({
 
@@ -617,36 +617,39 @@ export default function CartPanel() {
     setNoteText('');
   }
 
-  async function saveItemNote(
-    item: cartProductType
-  ) {
-    try {
-      const tableNo =
-        currentOrderNo || 'T1';
+async function saveItemNote(item: cartProductType) {
+  try {
+    const tableNo = currentOrderNo || 'T1';
 
-      await window.posApi.updateCartItemNote(
-        item.id,
-        noteText.trim(),
-        tableNo
-      );
+    console.log('========== SAVE NOTE ==========');
+    console.log('Item ID:', item.id);
+    console.log('Product:', item.name);
+    console.log('Note before save:', noteText);
+    console.log('Partition:', tableNo);
 
-      // Reload SQLite → React state
-      await reloadCart(tableNo);
+    // Update note in SQLite
+    const result = await window.posApi.updateCartItemNote(
+      item.id,
+      noteText.trim(),
+      tableNo
+    );
 
-      setEditingNoteId(null);
-      setNoteText('');
+    console.log('UPDATE NOTE RESULT:', result);
 
-    } catch (error) {
-      console.error(
-        'FAILED TO UPDATE CART NOTE',
-        error
-      );
+    // Reload SQLite → React state
+    await reloadCart(tableNo);
 
-      showToast(
-        'Failed to save item note.'
-      );
-    }
+    setEditingNoteId(null);
+    setNoteText('');
+
+    console.log('NOTE SAVED SUCCESSFULLY');
+
+  } catch (error) {
+    console.error('FAILED TO UPDATE CART NOTE', error);
+
+    showToast('Failed to save item note.');
   }
+}
 
   // =====================================================
   // UI

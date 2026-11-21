@@ -86,8 +86,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
-    "concurrently": "^10.0.4",
-    "electron": "^43.3.0",
+    "concurrently": "^10.0.7",
+    "electron": "^43.8.12",
     "electron-builder": "^26.15.3",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.0.8",
@@ -95,6 +95,6 @@
     "tailwindcss": "^4",
     "ts-prune": "^0.10.3",
     "typescript": "^5",
-    "wait-on": "^9.1.0"
+    "wait-on": "^9.5.1"
   }
 }

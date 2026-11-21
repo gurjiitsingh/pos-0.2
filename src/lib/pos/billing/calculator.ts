@@ -119,9 +119,9 @@ export function calculateBillAndroid(params: {
   const grandTotalPaise = itemSubtotalPaise - safeDiscountPaise
     + exclusiveTaxPaise + deliveryFeePaise + deliveryTaxPaise;
 
-  console.log("itemSubtotalPaise------------------------------", itemSubtotalPaise)
-  console.log(" totalTaxPaise------------------------------", totalTaxPaise)
-  console.log("grandtototal------------------------------", grandTotalPaise)
+  // console.log("itemSubtotalPaise------------------------------", itemSubtotalPaise)
+  // console.log(" totalTaxPaise------------------------------", totalTaxPaise)
+  // console.log("grandtototal------------------------------", grandTotalPaise)
   return {
     itemSubtotalPaise,
 taxableAmountPaise,

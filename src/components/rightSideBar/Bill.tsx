@@ -168,7 +168,7 @@ const { showToast, toastComponent } = useToast();
         await window.posApi.getBillItems(
           currentTableId
         );
- console.log("bill---------------------", billRows)
+ //console.log("bill---------------------", billRows)
       // =============================================
       // CART ITEMS
       //
@@ -312,7 +312,7 @@ const { regularItems, liquorItems } = useMemo(() => {
       deliveryFee,
       deliveryTaxPercent: 0,
     });
-      console.log("this is food cal data ------------------------------",result)
+     // console.log("this is food cal data ------------------------------",result)
 
     return {
       itemSubtotal: fromPaise(result.itemSubtotalPaise),
@@ -355,7 +355,7 @@ const calculationLiquorVat = useMemo(() => {
   });
     
   
-  console.log("liqu data-------------------------------", result)
+  //console.log("liqu data-------------------------------", result)
   return {
     itemSubtotal: fromPaise(result.itemSubtotalPaise),
     discount: fromPaise(result.discountPaise),
